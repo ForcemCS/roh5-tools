@@ -1,0 +1,40 @@
+ssh:
+    host: 
+    port: 22
+    user: root
+    password: 
+mysql:
+    host: 
+    port: 
+    user: root
+    password: 
+    database: 
+redis:
+    host: 
+    port: 
+    username: root
+    password: 
+paths:
+    makeconf: /root/new_server/roh5_new
+    helmfile: /root/helmfile_roh5
+kube:
+    namespace: roh5
+    deployment_prefix: game-roh5-server-
+servers:
+    always:
+        - 10004
+        - 10005
+        - 10006
+        - 10007
+        - 10008
+        - 10009
+        - 10989
+    selectable:
+        - 10004
+        - 10005
+        - 10006
+        - 10007
+        - 10008
+        - 10009
+web:
+    port: 17653

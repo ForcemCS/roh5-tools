@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ROH5 一键发布</title>
+<style>
+  :root {
+    /* 整体淡蓝色主题；日志容器单独保持黑色 */
+    --bg: #dceafc; --panel: #eaf3fe; --panel2: #f5f9ff; --line: #b9d4f2;
+    --fg: #14304d; --muted: #5b7799; --accent: #1f6feb; --accent2: #1f6feb;
+    /* 状态/日志用的高亮色（日志在黑底上，保持明亮） */
+    --green: #1a7f37; --red: #cf222e; --yellow: #9a6700; --cyan: #0a7c8c;
+    --log-green: #3fb950; --log-red: #f85149; --log-cyan: #56d4dd; --log-head: #58a6ff; --log-dim: #8b98a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header .tag { color: var(--muted); font-size: 12px; }
+  .wrap { display: grid; grid-template-columns: 420px 1fr; gap: 16px; padding: 16px; height: calc(100vh - 56px); }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: 1fr; height: auto; } }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 0 0 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 12px; color: var(--muted); }
+  input[type=text] {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 6px; padding: 8px 10px; font-size: 13px; outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  .servers { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chk {
+    display: flex; align-items: center; gap: 6px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; user-select: none;
+  }
+  .chk input { accent-color: var(--accent); }
+  /* 可点击的日志服按钮 */
+  .srvbtn {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 6px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .srvbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .srvbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tagrow input { font-size: 15px; letter-spacing: .5px; }
+  .always { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .always b { color: var(--accent); font-weight: 600; }
+  .btns { display: flex; gap: 10px; }
+  button {
+    border: none; border-radius: 8px; padding: 11px 16px; font-size: 14px; cursor: pointer; font-weight: 600;
+  }
+  .btn-primary { background: var(--accent2); color: #fff; flex: 1; }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-primary:disabled { background: #b9d4f2; color: #6f8aa8; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .btn-ghost:hover { color: var(--fg); border-color: var(--accent); }
+  /* 日志面板 */
+  .logcard { display: flex; flex-direction: column; min-height: 0; }
+  .logbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .status { font-size: 13px; font-weight: 600; }
+  .status.idle { color: var(--muted); }
+  .status.run { color: var(--yellow); }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+  pre#log {
+    flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 12px;
+    background: #0b0f14; color: #cdd9e5; /* 黑底上的浅色默认字，保证普通日志行清晰可读 */
+    border: 1px solid var(--line); border-radius: 8px;
+    font: 12.5px/1.55 "Cascadia Code", Consolas, "Courier New", monospace;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .l-cmd { color: var(--log-cyan); }
+  .l-ok { color: var(--log-green); }
+  .l-err { color: var(--log-red); }
+  .l-head { color: var(--log-head); font-weight: 700; }
+  .l-dim { color: var(--log-dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚀 ROH5 沙箱一键发布</h1>
+  <span class="tag">仅需填写游戏服镜像 TAG 与勾选清档</span>
+</header>
+
+<div class="wrap">
+  <!-- 左：操作 -->
+  <div class="col">
+    <div class="card">
+      <h2>本次发布</h2>
+      <div class="field tagrow full" style="margin-bottom:14px">
+        <label>镜像 TAG（必填）</label>
+        <input type="text" id="tag" placeholder="例如 202606280348-513" autocomplete="off">
+      </div>
+      <div class="field full">
+        <label>清档 + 重置开服天数（可多选 / 可不选）</label>
+        <div class="servers" id="servers"></div>
+      </div>
+      <div class="always" id="alwaysInfo"></div>
+      <div class="btns" style="margin-top:16px">
+        <button class="btn-primary" id="startBtn">开始发布</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>查看游戏服日志（实时）</h2>
+      <label>点击任意游戏服，实时跟踪其 kubectl 日志</label>
+      <div class="servers" id="logServers" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- 右：实时日志 -->
+  <div class="col">
+    <div class="card logcard" style="height:100%">
+      <div class="logbar">
+        <h2 style="margin:0">实时日志</h2>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="status idle" id="status">空闲</span>
+          <button class="btn-ghost" id="stopLogBtn" style="display:none">停止查看</button>
+          <button class="btn-ghost" id="clearBtn">清屏</button>
+        </div>
+      </div>
+      <pre id="log"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let meta = { always: [], selectable: [] };
+let logWS = null;        // 当前日志查看的 WebSocket
+let deploying = false;   // 是否正在发布
+
+function renderMeta() {
+  const box = $('servers'); box.innerHTML = '';
+  (meta.selectable || []).forEach(id => {
+    const lab = document.createElement('label'); lab.className = 'chk';
+    lab.innerHTML = `<input type="checkbox" value="${id}"><span>${id}</span>`;
+    box.appendChild(lab);
+  });
+  $('alwaysInfo').innerHTML = `必更新服（固定更新镜像 TAG）：<b>${(meta.always || []).join('，')}</b>`;
+
+  // 日志可查看的服 = 全部必更新服（游戏服 + 战斗服，都有对应 deployment）
+  const lbox = $('logServers'); lbox.innerHTML = '';
+  (meta.always || []).forEach(id => {
+    const b = document.createElement('button');
+    b.className = 'srvbtn'; b.dataset.server = id; b.textContent = id;
+    b.onclick = () => viewLogs(id);
+    lbox.appendChild(b);
+  });
+}
+
+function selectedServers() {
+  return [...document.querySelectorAll('#servers input:checked')].map(c => parseInt(c.value, 10));
+}
+
+// 日志渲染
+const logEl = $('log');
+function addLog(line) {
+  const div = document.createElement('span');
+  let cls = '';
+  if (line.includes('✖') || line.includes('失败') || line.includes('错误')) cls = 'l-err';
+  else if (line.includes('✔') || line.includes('成功') || line.includes('🎉')) cls = 'l-ok';
+  else if (line.startsWith('▶')) cls = 'l-cmd';
+  else if (/^[🚀🔸🔹🧹🧩🎯]/.test(line) || line.startsWith('═')) cls = 'l-head';
+  else if (line.trimStart().startsWith('SQL>') || line.includes('FLUSHDB') || line.includes('⏳') || line.includes('📊')) cls = 'l-dim';
+  div.className = cls;
+  div.textContent = line + '\n';
+  const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 30;
+  logEl.appendChild(div);
+  if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, kind) { const s = $('status'); s.textContent = text; s.className = 'status ' + kind; }
+
+$('clearBtn').onclick = () => { logEl.innerHTML = ''; };
+$('stopLogBtn').onclick = () => stopLogs();
+
+// 实时查看某游戏服日志
+function viewLogs(server) {
+  if (deploying) { alert('发布进行中，请等发布结束后再查看日志'); return; }
+  stopLogs(); // 切换服时先停掉上一个
+
+  logEl.innerHTML = '';
+  setStatus('📜 查看 ' + server + ' 日志中…', 'run');
+  $('stopLogBtn').style.display = '';
+  document.querySelectorAll('#logServers .srvbtn').forEach(b =>
+    b.classList.toggle('active', b.dataset.server == server));
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/logs`);
+  logWS = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ server }));
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'log') addLog(m.msg);
+    else if (m.type === 'error') { addLog('✖ ' + m.msg); setStatus('✖ 日志读取失败', 'err'); }
+    else if (m.type === 'done') setStatus('日志已结束', 'idle');
+  };
+  ws.onclose = () => { if (logWS === ws) { logWS = null; finishLogView(); } };
+  ws.onerror = () => { addLog('✖ 日志连接异常'); setStatus('✖ 连接异常', 'err'); };
+}
+
+function stopLogs() {
+  if (logWS) { const w = logWS; logWS = null; w.close(); }
+  finishLogView();
+}
+
+function finishLogView() {
+  $('stopLogBtn').style.display = 'none';
+  document.querySelectorAll('#logServers .srvbtn.active').forEach(b => b.classList.remove('active'));
+  if (!deploying) { const s = $('status'); if (s.classList.contains('run')) setStatus('空闲', 'idle'); }
+}
+
+// 开始发布
+$('startBtn').onclick = () => {
+  const tag = $('tag').value.trim();
+  if (!tag) { alert('请填写镜像 TAG'); return; }
+  const selected = selectedServers();
+
+  let msg = `即将发布：\n\n镜像 TAG: ${tag}\n必更新服: ${(meta.always || []).join(', ')}\n`;
+  msg += selected.length
+    ? `\n⚠ 以下服将【清档 + 重置开服天数】（删除 deployment / flush redis / 重置 open_time）：\n${selected.join(', ')}\n`
+    : `\n本次不清档任何服。\n`;
+  msg += `\n确认执行？`;
+  if (!confirm(msg)) return;
+
+  startDeploy(tag, selected);
+};
+
+function startDeploy(tag, selected) {
+  stopLogs(); // 发布前先停掉日志查看，避免两路日志混在一起
+  deploying = true;
+  $('startBtn').disabled = true;
+  setStatus('发布中…', 'run');
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => ws.send(JSON.stringify({ action: 'start', tag, selected }));
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'log') addLog(m.msg);
+    else if (m.type === 'done') setStatus('✔ 发布成功', 'ok');
+    else if (m.type === 'error') { addLog('✖ ' + m.msg); setStatus('✖ 发布失败', 'err'); }
+  };
+  ws.onclose = () => { deploying = false; $('startBtn').disabled = false; };
+  ws.onerror = () => { addLog('✖ WebSocket 连接异常'); setStatus('✖ 连接异常', 'err'); deploying = false; $('startBtn').disabled = false; };
+}
+
+// 启动：加载服列表（不含任何凭据）
+fetch('/api/meta').then(r => r.json()).then(m => { meta = m; renderMeta(); })
+  .catch(e => addLog('✖ 加载服列表失败: ' + e.message));
+</script>
+</body>
+</html>
